@@ -1,0 +1,305 @@
+```react
+import React, { useState } from 'react';
+import { Search, AlertCircle, Loader2, Scale, Library, ChevronRight, BookOpen, X, FileText } from 'lucide-react';
+
+export default function App() {
+  const [query, setQuery] = useState('');
+  const [cases, setCases] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [hasSearched, setHasSearched] = useState(false);
+  const [totalHits, setTotalHits] = useState(0);
+
+  // Modal State
+  const [selectedArticle, setSelectedArticle] = useState(null);
+  const [isLoadingArticle, setIsLoadingArticle] = useState(false);
+
+  const fetchCases = async (searchTerm) => {
+    setIsLoading(true);
+    setError(null);
+    setHasSearched(true);
+
+    try {
+      const wikiQuery = searchTerm.includes('v.') ? searchTerm : `${searchTerm} court case`;
+      const url = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(wikiQuery)}&utf8=&format=json&origin=*`;
+      
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        throw new Error(`Network response was not ok`);
+      }
+      
+      const data = await response.json();
+      
+      if (data.error) {
+        throw new Error(data.error.info);
+      }
+
+      setCases(data.query.search || []);
+      setTotalHits(data.query.searchinfo?.totalhits || 0);
+      
+    } catch (err) {
+      console.error("Fetch failed:", err);
+      setError("Failed to connect to the search API. Please try again.");
+    } finally {
+      setIsLoading(false);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const handleSearch = (e) => {
+    e.preventDefault();
+    if (!query.trim()) return;
+    fetchCases(query);
+  };
+
+  const handleQuickSearch = (term) => {
+    setQuery(term);
+    fetchCases(term);
+  };
+
+  const formatDate = (isoString) => {
+    try {
+      const date = new Date(isoString);
+      return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    } catch (e) {
+      return 'Unknown Date';
+    }
+  };
+
+  // Fetch full article text to display inside the app
+  const openArticle = async (pageId, title) => {
+    setSelectedArticle({ title, extract: '' }); // Open modal immediately with title
+    setIsLoadingArticle(true);
+
+    try {
+      const url = `https://en.wikipedia.org/w/api.php?action=query&prop=extracts&pageids=${pageId}&format=json&origin=*`;
+      const response = await fetch(url);
+      const data = await response.json();
+      
+      const extractHTML = data.query.pages[pageId]?.extract || "<p>No detailed information found.</p>";
+      setSelectedArticle({ title, extract: extractHTML });
+    } catch (err) {
+      console.error("Failed to load article:", err);
+      setSelectedArticle({ title, extract: "<p>Failed to load the article contents. Please try again later.</p>" });
+    } finally {
+      setIsLoadingArticle(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-50 via-slate-100 to-slate-50 dark:from-slate-800 dark:via-slate-900 dark:to-slate-950 text-slate-900 dark:text-slate-100 font-sans selection:bg-blue-200 dark:selection:bg-blue-900">
+      
+      {/* Header */}
+      <header className="pt-20 pb-10 px-4 max-w-4xl mx-auto text-center">
+        <div className="inline-flex items-center justify-center p-4 bg-indigo-100 dark:bg-indigo-900/50 rounded-3xl mb-6 text-indigo-700 dark:text-indigo-400 shadow-sm border border-indigo-200 dark:border-indigo-800/50">
+          <Scale size={48} strokeWidth={1.5} />
+        </div>
+        <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight mb-5 text-slate-900 dark:text-white">
+          Legal Case Explorer
+        </h1>
+        <p className="text-lg md:text-xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto">
+          Search legal history, landmark decisions, and court cases via the Open Knowledge API.
+        </p>
+      </header>
+
+      {/* Search Form */}
+      <div className="max-w-3xl mx-auto px-4 mb-12">
+        <form onSubmit={handleSearch} className="relative group">
+          <div className="relative flex items-center shadow-lg rounded-full overflow-hidden bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 focus-within:border-indigo-500 dark:focus-within:border-indigo-500 transition-all">
+            <div className="pl-6 text-slate-400 dark:text-slate-500">
+              <Search size={24} />
+            </div>
+            <input
+              type="text"
+              className="w-full py-5 px-4 bg-transparent outline-none text-lg placeholder-slate-400 dark:placeholder-slate-500"
+              placeholder="Search e.g., 'Roe v. Wade' or 'Copyright Infringement'"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            <button
+              type="submit"
+              disabled={isLoading || !query.trim()}
+              className="mr-2 py-3 px-8 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 dark:disabled:bg-indigo-800 text-white font-semibold rounded-full transition-colors flex items-center gap-2"
+            >
+              {isLoading ? <Loader2 className="animate-spin" size={20} /> : 'Search'}
+            </button>
+          </div>
+        </form>
+
+        {/* Quick Search Chips */}
+        <div className="flex flex-wrap justify-center items-center gap-2 mt-6">
+          <span className="text-sm font-medium text-slate-500 dark:text-slate-400 mr-2">Landmark Cases:</span>
+          {['Marbury v. Madison', 'Miranda v. Arizona', 'Plessy v. Ferguson', 'Citizens United'].map(term => (
+            <button
+              key={term}
+              type="button"
+              onClick={() => handleQuickSearch(term)}
+              className="text-sm px-4 py-1.5 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border border-slate-200 dark:border-slate-700 rounded-full hover:border-indigo-400 dark:hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors shadow-sm"
+            >
+              {term}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Main Results Area */}
+      <main className="max-w-4xl mx-auto px-4 pb-24">
+        
+        {/* Error Message */}
+        {error && (
+          <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 p-4 rounded-2xl flex items-start gap-3 mb-8 shadow-sm">
+            <AlertCircle className="shrink-0 mt-0.5" />
+            <div>
+              <h3 className="font-bold">Search Failed</h3>
+              <p>{error}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Results Info */}
+        {hasSearched && !isLoading && !error && (
+          <div className="mb-6 flex items-center justify-between text-slate-600 dark:text-slate-400 px-2">
+            <span className="font-semibold bg-slate-200 dark:bg-slate-800 py-1 px-3 rounded-full text-sm">
+              {totalHits.toLocaleString()} results found
+            </span>
+            <span className="text-sm font-medium">Top {cases.length} results</span>
+          </div>
+        )}
+
+        <div className="space-y-4">
+          
+          {/* Loading State */}
+          {isLoading && (
+            <div className="flex flex-col items-center justify-center py-32 text-slate-500 dark:text-slate-400">
+              <Loader2 className="animate-spin mb-4 text-indigo-500" size={48} />
+              <p className="font-medium text-lg animate-pulse">Querying legal records...</p>
+            </div>
+          )}
+
+          {/* Render Cases */}
+          {!isLoading && cases.map((c) => (
+            <div 
+              key={c.pageid} 
+              onClick={() => openArticle(c.pageid, c.title)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter') openArticle(c.pageid, c.title); }}
+              className="block p-6 sm:p-8 bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 hover:shadow-lg hover:border-indigo-300 dark:hover:border-indigo-600 transition-all group cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-slate-900"
+            >
+              <div className="flex flex-col sm:flex-row items-start justify-between gap-6">
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors mb-3 truncate whitespace-normal">
+                    {c.title}
+                  </h2>
+                  
+                  <div className="flex flex-wrap items-center gap-y-2 gap-x-4 text-sm font-medium text-slate-600 dark:text-slate-400 mb-4">
+                    <span className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-900 py-1 px-2.5 rounded-lg">
+                      <BookOpen size={16} className="text-slate-400" /> 
+                      Reference Article
+                    </span>
+                    <span className="hidden sm:inline text-slate-300 dark:text-slate-600">•</span>
+                    <span className="text-slate-700 dark:text-slate-300">
+                      Updated: {formatDate(c.timestamp)}
+                    </span>
+                  </div>
+
+                  {/* Extract text snippet safely */}
+                  <div 
+                    className="text-slate-600 dark:text-slate-300 leading-relaxed text-sm sm:text-base line-clamp-3 [&>span.searchmatch]:font-bold [&>span.searchmatch]:text-indigo-600 dark:[&>span.searchmatch]:text-indigo-400"
+                    dangerouslySetInnerHTML={{ __html: c.snippet + '...' }}
+                  />
+                  
+                </div>
+                
+                {/* Desktop Button */}
+                <div className="shrink-0 hidden sm:flex pt-2">
+                  <span className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-xl font-medium group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                    Read Article <FileText size={16} />
+                  </span>
+                </div>
+
+                {/* Mobile Button */}
+                <div className="sm:hidden w-full mt-2">
+                  <span className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-xl font-medium group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                    Read Article <FileText size={16} />
+                  </span>
+                </div>
+
+              </div>
+            </div>
+          ))}
+
+          {/* Empty State */}
+          {hasSearched && !isLoading && !error && cases.length === 0 && (
+            <div className="text-center py-24 px-4 bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
+              <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-slate-50 dark:bg-slate-900 text-slate-400 dark:text-slate-500 mb-5">
+                <Search size={40} />
+              </div>
+              <h3 className="text-2xl font-bold mb-2">No results found</h3>
+              <p className="text-slate-500 dark:text-slate-400 text-lg">
+                Try adjusting your search terms or checking for typos.
+              </p>
+            </div>
+          )}
+        </div>
+      </main>
+
+      {/* Article Reader Modal */}
+      {selectedArticle && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-4xl max-h-[90vh] flex flex-col rounded-3xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+               <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-3">
+                 <Scale className="text-indigo-500 hidden sm:block" size={24} />
+                 {selectedArticle.title}
+               </h2>
+               <button 
+                 onClick={() => setSelectedArticle(null)} 
+                 className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors"
+                 aria-label="Close modal"
+               >
+                 <X size={24} />
+               </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto p-6 sm:p-8 custom-scrollbar relative">
+               {isLoadingArticle ? (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
+                    <Loader2 className="animate-spin text-indigo-500 mb-4" size={40} />
+                    <p className="text-slate-600 dark:text-slate-400 font-medium">Loading document text...</p>
+                  </div>
+               ) : (
+                  <div 
+                    className="max-w-none pb-12
+                      [&>p]:mb-6 [&>p]:leading-relaxed [&>p]:text-lg [&>p]:text-slate-700 dark:[&>p]:text-slate-300
+                      [&>h2]:text-2xl [&>h2]:font-bold [&>h2]:mt-10 [&>h2]:mb-4 [&>h2]:text-slate-900 dark:[&>h2]:text-slate-100 [&>h2]:pb-2 [&>h2]:border-b [&>h2]:border-slate-200 dark:[&>h2]:border-slate-800
+                      [&>h3]:text-xl [&>h3]:font-bold [&>h3]:mt-8 [&>h3]:mb-3 [&>h3]:text-slate-900 dark:[&>h3]:text-slate-100
+                      [&>ul]:list-disc [&>ul]:pl-6 [&>ul]:mb-6 [&>ul]:text-lg [&>ul]:text-slate-700 dark:[&>ul]:text-slate-300 [&>ul>li]:mb-2
+                      [&>ol]:list-decimal [&>ol]:pl-6 [&>ol]:mb-6 [&>ol]:text-lg [&>ol]:text-slate-700 dark:[&>ol]:text-slate-300 [&>ol>li]:mb-2
+                      [&>blockquote]:border-l-4 [&>blockquote]:border-indigo-500 [&>blockquote]:pl-4 [&>blockquote]:italic [&>blockquote]:text-slate-600 dark:[&>blockquote]:text-slate-400
+                      [&>figure]:my-8 [&>figure>img]:rounded-xl [&>figure>figcaption]:text-center [&>figure>figcaption]:text-sm [&>figure>figcaption]:text-slate-500 [&>figure>figcaption]:mt-2"
+                    dangerouslySetInnerHTML={{ __html: selectedArticle.extract }}
+                  />
+               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Global styles for custom scrollbar in the modal */}
+      <style dangerouslySetInnerHTML={{__html: `
+        .custom-scrollbar::-webkit-scrollbar { width: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 20px; }
+        .dark .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #475569; }
+      `}} />
+    </div>
+  );
+}
+
+
+```
