@@ -1,305 +1,424 @@
-```react
-import React, { useState } from 'react';
-import { Search, AlertCircle, Loader2, Scale, Library, ChevronRight, BookOpen, X, FileText } from 'lucide-react';
-
-export default function App() {
-  const [query, setQuery] = useState('');
-  const [cases, setCases] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [hasSearched, setHasSearched] = useState(false);
-  const [totalHits, setTotalHits] = useState(0);
-
-  // Modal State
-  const [selectedArticle, setSelectedArticle] = useState(null);
-  const [isLoadingArticle, setIsLoadingArticle] = useState(false);
-
-  const fetchCases = async (searchTerm) => {
-    setIsLoading(true);
-    setError(null);
-    setHasSearched(true);
-
-    try {
-      const wikiQuery = searchTerm.includes('v.') ? searchTerm : `${searchTerm} court case`;
-      const url = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(wikiQuery)}&utf8=&format=json&origin=*`;
-      
-      const response = await fetch(url);
-      
-      if (!response.ok) {
-        throw new Error(`Network response was not ok`);
+```html
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Legal Case Explorer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'sans-serif'],
+          }
+        }
       }
-      
-      const data = await response.json();
-      
-      if (data.error) {
-        throw new Error(data.error.info);
-      }
-
-      setCases(data.query.search || []);
-      setTotalHits(data.query.searchinfo?.totalhits || 0);
-      
-    } catch (err) {
-      console.error("Fetch failed:", err);
-      setError("Failed to connect to the search API. Please try again.");
-    } finally {
-      setIsLoading(false);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-  };
-
-  const handleSearch = (e) => {
-    e.preventDefault();
-    if (!query.trim()) return;
-    fetchCases(query);
-  };
-
-  const handleQuickSearch = (term) => {
-    setQuery(term);
-    fetchCases(term);
-  };
-
-  const formatDate = (isoString) => {
-    try {
-      const date = new Date(isoString);
-      return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-    } catch (e) {
-      return 'Unknown Date';
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    
+    body {
+      font-family: 'Inter', sans-serif;
     }
-  };
-
-  // Fetch full article text to display inside the app
-  const openArticle = async (pageId, title) => {
-    setSelectedArticle({ title, extract: '' }); // Open modal immediately with title
-    setIsLoadingArticle(true);
-
-    try {
-      const url = `https://en.wikipedia.org/w/api.php?action=query&prop=extracts&pageids=${pageId}&format=json&origin=*`;
-      const response = await fetch(url);
-      const data = await response.json();
-      
-      const extractHTML = data.query.pages[pageId]?.extract || "<p>No detailed information found.</p>";
-      setSelectedArticle({ title, extract: extractHTML });
-    } catch (err) {
-      console.error("Failed to load article:", err);
-      setSelectedArticle({ title, extract: "<p>Failed to load the article contents. Please try again later.</p>" });
-    } finally {
-      setIsLoadingArticle(false);
+    
+    /* Custom Scrollbar for Modal */
+    .custom-scrollbar::-webkit-scrollbar { width: 8px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 20px; }
+    @media (prefers-color-scheme: dark) {
+      .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #475569; }
     }
-  };
 
-  return (
-    <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-50 via-slate-100 to-slate-50 dark:from-slate-800 dark:via-slate-900 dark:to-slate-950 text-slate-900 dark:text-slate-100 font-sans selection:bg-blue-200 dark:selection:bg-blue-900">
-      
-      {/* Header */}
-      <header className="pt-20 pb-10 px-4 max-w-4xl mx-auto text-center">
-        <div className="inline-flex items-center justify-center p-4 bg-indigo-100 dark:bg-indigo-900/50 rounded-3xl mb-6 text-indigo-700 dark:text-indigo-400 shadow-sm border border-indigo-200 dark:border-indigo-800/50">
-          <Scale size={48} strokeWidth={1.5} />
+    /* Modal Article Formatting */
+    .article-content p { margin-bottom: 1.5rem; line-height: 1.75; font-size: 1.125rem; color: #334155; }
+    .dark .article-content p { color: #cbd5e1; }
+    .article-content h2 { font-size: 1.5rem; font-weight: 700; margin-top: 2.5rem; margin-bottom: 1rem; color: #0f172a; padding-bottom: 0.5rem; border-bottom: 1px solid #e2e8f0; }
+    .dark .article-content h2 { color: #f1f5f9; border-color: #1e293b; }
+    .article-content h3 { font-size: 1.25rem; font-weight: 700; margin-top: 2rem; margin-bottom: 0.75rem; color: #0f172a; }
+    .dark .article-content h3 { color: #f1f5f9; }
+    .article-content ul { list-style-type: disc; padding-left: 1.5rem; margin-bottom: 1.5rem; font-size: 1.125rem; color: #334155; }
+    .dark .article-content ul { color: #cbd5e1; }
+    .article-content ul li { margin-bottom: 0.5rem; }
+    .article-content ol { list-style-type: decimal; padding-left: 1.5rem; margin-bottom: 1.5rem; font-size: 1.125rem; color: #334155; }
+    .dark .article-content ol { color: #cbd5e1; }
+    .article-content ol li { margin-bottom: 0.5rem; }
+    .article-content blockquote { border-left: 4px solid #6366f1; padding-left: 1rem; font-style: italic; color: #475569; }
+    .dark .article-content blockquote { color: #94a3b8; }
+    .article-content .searchmatch { font-weight: bold; color: #4f46e5; }
+    .dark .article-content .searchmatch { color: #818cf8; }
+  </style>
+</head>
+<body class="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-50 via-slate-100 to-slate-50 dark:from-slate-800 dark:via-slate-900 dark:to-slate-950 text-slate-900 dark:text-slate-100 selection:bg-blue-200 dark:selection:bg-blue-900">
+
+  <!-- Header -->
+  <header class="pt-20 pb-10 px-4 max-w-4xl mx-auto text-center">
+    <div class="inline-flex items-center justify-center p-4 bg-indigo-100 dark:bg-indigo-900/50 rounded-3xl mb-6 text-indigo-700 dark:text-indigo-400 shadow-sm border border-indigo-200 dark:border-indigo-800/50">
+      <i data-lucide="scale" style="width: 48px; height: 48px; stroke-width: 1.5px;"></i>
+    </div>
+    <h1 class="text-4xl md:text-5xl font-extrabold tracking-tight mb-5 text-slate-900 dark:text-white">
+      Legal Case Explorer
+    </h1>
+    <p class="text-lg md:text-xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto">
+      Search legal history, landmark decisions, and court cases via the Open Knowledge API.
+    </p>
+  </header>
+
+  <!-- Search Form -->
+  <div class="max-w-3xl mx-auto px-4 mb-12">
+    <form id="searchForm" class="relative group">
+      <div class="relative flex items-center shadow-lg rounded-full overflow-hidden bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 focus-within:border-indigo-500 dark:focus-within:border-indigo-500 transition-all">
+        <div class="pl-6 text-slate-400 dark:text-slate-500">
+          <i data-lucide="search" style="width: 24px; height: 24px;"></i>
         </div>
-        <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight mb-5 text-slate-900 dark:text-white">
-          Legal Case Explorer
-        </h1>
-        <p className="text-lg md:text-xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto">
-          Search legal history, landmark decisions, and court cases via the Open Knowledge API.
-        </p>
-      </header>
+        <input
+          type="text"
+          id="searchInput"
+          class="w-full py-5 px-4 bg-transparent outline-none text-lg placeholder-slate-400 dark:placeholder-slate-500"
+          placeholder="Search e.g., 'Roe v. Wade' or 'Copyright Infringement'"
+        />
+        <button
+          type="submit"
+          id="searchBtn"
+          disabled
+          class="mr-2 py-3 px-8 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 dark:disabled:bg-indigo-800 text-white font-semibold rounded-full transition-colors flex items-center gap-2"
+        >
+          <span id="searchBtnText">Search</span>
+          <i data-lucide="loader-2" id="searchBtnLoader" class="animate-spin hidden" style="width: 20px; height: 20px;"></i>
+        </button>
+      </div>
+    </form>
 
-      {/* Search Form */}
-      <div className="max-w-3xl mx-auto px-4 mb-12">
-        <form onSubmit={handleSearch} className="relative group">
-          <div className="relative flex items-center shadow-lg rounded-full overflow-hidden bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 focus-within:border-indigo-500 dark:focus-within:border-indigo-500 transition-all">
-            <div className="pl-6 text-slate-400 dark:text-slate-500">
-              <Search size={24} />
-            </div>
-            <input
-              type="text"
-              className="w-full py-5 px-4 bg-transparent outline-none text-lg placeholder-slate-400 dark:placeholder-slate-500"
-              placeholder="Search e.g., 'Roe v. Wade' or 'Copyright Infringement'"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-            <button
-              type="submit"
-              disabled={isLoading || !query.trim()}
-              className="mr-2 py-3 px-8 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 dark:disabled:bg-indigo-800 text-white font-semibold rounded-full transition-colors flex items-center gap-2"
-            >
-              {isLoading ? <Loader2 className="animate-spin" size={20} /> : 'Search'}
-            </button>
-          </div>
-        </form>
+    <!-- Quick Search Chips -->
+    <div class="flex flex-wrap justify-center items-center gap-2 mt-6">
+      <span class="text-sm font-medium text-slate-500 dark:text-slate-400 mr-2">Landmark Cases:</span>
+      <button type="button" onclick="quickSearch('Marbury v. Madison')" class="text-sm px-4 py-1.5 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border border-slate-200 dark:border-slate-700 rounded-full hover:border-indigo-400 dark:hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors shadow-sm">Marbury v. Madison</button>
+      <button type="button" onclick="quickSearch('Miranda v. Arizona')" class="text-sm px-4 py-1.5 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border border-slate-200 dark:border-slate-700 rounded-full hover:border-indigo-400 dark:hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors shadow-sm">Miranda v. Arizona</button>
+      <button type="button" onclick="quickSearch('Plessy v. Ferguson')" class="text-sm px-4 py-1.5 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border border-slate-200 dark:border-slate-700 rounded-full hover:border-indigo-400 dark:hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors shadow-sm">Plessy v. Ferguson</button>
+      <button type="button" onclick="quickSearch('Citizens United')" class="text-sm px-4 py-1.5 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border border-slate-200 dark:border-slate-700 rounded-full hover:border-indigo-400 dark:hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors shadow-sm">Citizens United</button>
+    </div>
+  </div>
 
-        {/* Quick Search Chips */}
-        <div className="flex flex-wrap justify-center items-center gap-2 mt-6">
-          <span className="text-sm font-medium text-slate-500 dark:text-slate-400 mr-2">Landmark Cases:</span>
-          {['Marbury v. Madison', 'Miranda v. Arizona', 'Plessy v. Ferguson', 'Citizens United'].map(term => (
-            <button
-              key={term}
-              type="button"
-              onClick={() => handleQuickSearch(term)}
-              className="text-sm px-4 py-1.5 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border border-slate-200 dark:border-slate-700 rounded-full hover:border-indigo-400 dark:hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors shadow-sm"
-            >
-              {term}
-            </button>
-          ))}
-        </div>
+  <!-- Main Results Area -->
+  <main class="max-w-4xl mx-auto px-4 pb-24" id="mainContent">
+    
+    <!-- Error Message Container -->
+    <div id="errorContainer" class="hidden bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 p-4 rounded-2xl flex items-start gap-3 mb-8 shadow-sm">
+      <i data-lucide="alert-circle" class="shrink-0 mt-0.5"></i>
+      <div>
+        <h3 class="font-bold">Search Failed</h3>
+        <p id="errorText"></p>
+      </div>
+    </div>
+
+    <!-- Results Info -->
+    <div id="resultsInfo" class="hidden mb-6 flex items-center justify-between text-slate-600 dark:text-slate-400 px-2">
+      <span class="font-semibold bg-slate-200 dark:bg-slate-800 py-1 px-3 rounded-full text-sm" id="totalHitsBadge">
+        0 results found
+      </span>
+      <span class="text-sm font-medium" id="topResultsCount">Top 0 results</span>
+    </div>
+
+    <div class="space-y-4 relative min-h-[300px]">
+      
+      <!-- Loading State -->
+      <div id="loadingState" class="hidden absolute inset-0 flex flex-col items-center justify-center py-16 text-slate-500 dark:text-slate-400 bg-transparent">
+        <i data-lucide="loader-2" class="animate-spin mb-4 text-indigo-500" style="width: 48px; height: 48px;"></i>
+        <p class="font-medium text-lg animate-pulse">Querying legal records...</p>
       </div>
 
-      {/* Main Results Area */}
-      <main className="max-w-4xl mx-auto px-4 pb-24">
-        
-        {/* Error Message */}
-        {error && (
-          <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 p-4 rounded-2xl flex items-start gap-3 mb-8 shadow-sm">
-            <AlertCircle className="shrink-0 mt-0.5" />
-            <div>
-              <h3 className="font-bold">Search Failed</h3>
-              <p>{error}</p>
-            </div>
+      <!-- Results Container -->
+      <div id="resultsContainer" class="space-y-4">
+        <!-- Default Empty State -->
+        <div id="emptyState" class="text-center py-24 px-4 bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
+          <div class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-slate-50 dark:bg-slate-900 text-slate-400 dark:text-slate-500 mb-5">
+            <i data-lucide="search" style="width: 40px; height: 40px;"></i>
           </div>
-        )}
-
-        {/* Results Info */}
-        {hasSearched && !isLoading && !error && (
-          <div className="mb-6 flex items-center justify-between text-slate-600 dark:text-slate-400 px-2">
-            <span className="font-semibold bg-slate-200 dark:bg-slate-800 py-1 px-3 rounded-full text-sm">
-              {totalHits.toLocaleString()} results found
-            </span>
-            <span className="text-sm font-medium">Top {cases.length} results</span>
-          </div>
-        )}
-
-        <div className="space-y-4">
-          
-          {/* Loading State */}
-          {isLoading && (
-            <div className="flex flex-col items-center justify-center py-32 text-slate-500 dark:text-slate-400">
-              <Loader2 className="animate-spin mb-4 text-indigo-500" size={48} />
-              <p className="font-medium text-lg animate-pulse">Querying legal records...</p>
-            </div>
-          )}
-
-          {/* Render Cases */}
-          {!isLoading && cases.map((c) => (
-            <div 
-              key={c.pageid} 
-              onClick={() => openArticle(c.pageid, c.title)}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => { if (e.key === 'Enter') openArticle(c.pageid, c.title); }}
-              className="block p-6 sm:p-8 bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 hover:shadow-lg hover:border-indigo-300 dark:hover:border-indigo-600 transition-all group cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-slate-900"
-            >
-              <div className="flex flex-col sm:flex-row items-start justify-between gap-6">
-                <div className="flex-1 min-w-0">
-                  <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors mb-3 truncate whitespace-normal">
-                    {c.title}
-                  </h2>
-                  
-                  <div className="flex flex-wrap items-center gap-y-2 gap-x-4 text-sm font-medium text-slate-600 dark:text-slate-400 mb-4">
-                    <span className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-900 py-1 px-2.5 rounded-lg">
-                      <BookOpen size={16} className="text-slate-400" /> 
-                      Reference Article
-                    </span>
-                    <span className="hidden sm:inline text-slate-300 dark:text-slate-600">•</span>
-                    <span className="text-slate-700 dark:text-slate-300">
-                      Updated: {formatDate(c.timestamp)}
-                    </span>
-                  </div>
-
-                  {/* Extract text snippet safely */}
-                  <div 
-                    className="text-slate-600 dark:text-slate-300 leading-relaxed text-sm sm:text-base line-clamp-3 [&>span.searchmatch]:font-bold [&>span.searchmatch]:text-indigo-600 dark:[&>span.searchmatch]:text-indigo-400"
-                    dangerouslySetInnerHTML={{ __html: c.snippet + '...' }}
-                  />
-                  
-                </div>
-                
-                {/* Desktop Button */}
-                <div className="shrink-0 hidden sm:flex pt-2">
-                  <span className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-xl font-medium group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                    Read Article <FileText size={16} />
-                  </span>
-                </div>
-
-                {/* Mobile Button */}
-                <div className="sm:hidden w-full mt-2">
-                  <span className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-xl font-medium group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                    Read Article <FileText size={16} />
-                  </span>
-                </div>
-
-              </div>
-            </div>
-          ))}
-
-          {/* Empty State */}
-          {hasSearched && !isLoading && !error && cases.length === 0 && (
-            <div className="text-center py-24 px-4 bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
-              <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-slate-50 dark:bg-slate-900 text-slate-400 dark:text-slate-500 mb-5">
-                <Search size={40} />
-              </div>
-              <h3 className="text-2xl font-bold mb-2">No results found</h3>
-              <p className="text-slate-500 dark:text-slate-400 text-lg">
-                Try adjusting your search terms or checking for typos.
-              </p>
-            </div>
-          )}
+          <h3 class="text-2xl font-bold mb-2">Ready to search</h3>
+          <p class="text-slate-500 dark:text-slate-400 text-lg">
+            Enter a legal case name above to explore historical records.
+          </p>
         </div>
-      </main>
-
-      {/* Article Reader Modal */}
-      {selectedArticle && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-4xl max-h-[90vh] flex flex-col rounded-3xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800">
-            
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
-               <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-3">
-                 <Scale className="text-indigo-500 hidden sm:block" size={24} />
-                 {selectedArticle.title}
-               </h2>
-               <button 
-                 onClick={() => setSelectedArticle(null)} 
-                 className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors"
-                 aria-label="Close modal"
-               >
-                 <X size={24} />
-               </button>
-            </div>
-
-            {/* Modal Body */}
-            <div className="flex-1 overflow-y-auto p-6 sm:p-8 custom-scrollbar relative">
-               {isLoadingArticle ? (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
-                    <Loader2 className="animate-spin text-indigo-500 mb-4" size={40} />
-                    <p className="text-slate-600 dark:text-slate-400 font-medium">Loading document text...</p>
-                  </div>
-               ) : (
-                  <div 
-                    className="max-w-none pb-12
-                      [&>p]:mb-6 [&>p]:leading-relaxed [&>p]:text-lg [&>p]:text-slate-700 dark:[&>p]:text-slate-300
-                      [&>h2]:text-2xl [&>h2]:font-bold [&>h2]:mt-10 [&>h2]:mb-4 [&>h2]:text-slate-900 dark:[&>h2]:text-slate-100 [&>h2]:pb-2 [&>h2]:border-b [&>h2]:border-slate-200 dark:[&>h2]:border-slate-800
-                      [&>h3]:text-xl [&>h3]:font-bold [&>h3]:mt-8 [&>h3]:mb-3 [&>h3]:text-slate-900 dark:[&>h3]:text-slate-100
-                      [&>ul]:list-disc [&>ul]:pl-6 [&>ul]:mb-6 [&>ul]:text-lg [&>ul]:text-slate-700 dark:[&>ul]:text-slate-300 [&>ul>li]:mb-2
-                      [&>ol]:list-decimal [&>ol]:pl-6 [&>ol]:mb-6 [&>ol]:text-lg [&>ol]:text-slate-700 dark:[&>ol]:text-slate-300 [&>ol>li]:mb-2
-                      [&>blockquote]:border-l-4 [&>blockquote]:border-indigo-500 [&>blockquote]:pl-4 [&>blockquote]:italic [&>blockquote]:text-slate-600 dark:[&>blockquote]:text-slate-400
-                      [&>figure]:my-8 [&>figure>img]:rounded-xl [&>figure>figcaption]:text-center [&>figure>figcaption]:text-sm [&>figure>figcaption]:text-slate-500 [&>figure>figcaption]:mt-2"
-                    dangerouslySetInnerHTML={{ __html: selectedArticle.extract }}
-                  />
-               )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Global styles for custom scrollbar in the modal */}
-      <style dangerouslySetInnerHTML={{__html: `
-        .custom-scrollbar::-webkit-scrollbar { width: 8px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 20px; }
-        .dark .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #475569; }
-      `}} />
+      </div>
     </div>
-  );
-}
+  </main>
 
+  <!-- Article Reader Modal -->
+  <div id="articleModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm transition-opacity">
+    <div class="bg-white dark:bg-slate-900 w-full max-w-4xl h-[90vh] flex flex-col rounded-3xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800">
+      
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between p-4 sm:p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 shrink-0">
+         <h2 id="modalTitle" class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-3 truncate pr-4">
+           <!-- Title gets injected here -->
+         </h2>
+         <button 
+           onclick="closeModal()" 
+           class="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors shrink-0"
+           aria-label="Close modal"
+         >
+           <i data-lucide="x" style="width: 24px; height: 24px;"></i>
+         </button>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="flex-1 overflow-y-auto p-6 sm:p-8 custom-scrollbar relative">
+         <div id="modalLoading" class="absolute inset-0 flex flex-col items-center justify-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm z-10">
+            <i data-lucide="loader-2" class="animate-spin text-indigo-500 mb-4" style="width: 40px; height: 40px;"></i>
+            <p class="text-slate-600 dark:text-slate-400 font-medium">Loading document text...</p>
+         </div>
+         <div id="modalContent" class="article-content max-w-none pb-12">
+            <!-- Extract gets injected here -->
+         </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Initialize Lucide Icons
+    lucide.createIcons();
+
+    // Elements
+    const searchInput = document.getElementById('searchInput');
+    const searchBtn = document.getElementById('searchBtn');
+    const searchBtnText = document.getElementById('searchBtnText');
+    const searchBtnLoader = document.getElementById('searchBtnLoader');
+    const searchForm = document.getElementById('searchForm');
+    
+    const resultsContainer = document.getElementById('resultsContainer');
+    const loadingState = document.getElementById('loadingState');
+    const emptyState = document.getElementById('emptyState');
+    const errorContainer = document.getElementById('errorContainer');
+    const errorText = document.getElementById('errorText');
+    const resultsInfo = document.getElementById('resultsInfo');
+    const totalHitsBadge = document.getElementById('totalHitsBadge');
+    const topResultsCount = document.getElementById('topResultsCount');
+
+    // Modal Elements
+    const articleModal = document.getElementById('articleModal');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalContent = document.getElementById('modalContent');
+    const modalLoading = document.getElementById('modalLoading');
+
+    // Set dark mode based on system preference
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      document.documentElement.classList.add('dark');
+    }
+
+    // Handle Input change to enable/disable button
+    searchInput.addEventListener('input', (e) => {
+      searchBtn.disabled = e.target.value.trim().length === 0;
+    });
+
+    // Handle Form Submit
+    searchForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const query = searchInput.value.trim();
+      if (query) {
+        fetchCases(query);
+      }
+    });
+
+    // Quick Search
+    window.quickSearch = function(term) {
+      searchInput.value = term;
+      searchBtn.disabled = false;
+      fetchCases(term);
+    };
+
+    // Format Date string
+    function formatDate(isoString) {
+      try {
+        const date = new Date(isoString);
+        return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+      } catch (e) {
+        return 'Unknown Date';
+      }
+    }
+
+    // Fetch List of Cases
+    async function fetchCases(searchTerm) {
+      // UI State: Loading
+      errorContainer.classList.add('hidden');
+      resultsInfo.classList.add('hidden');
+      resultsContainer.innerHTML = '';
+      loadingState.classList.remove('hidden');
+      searchBtnText.classList.add('hidden');
+      searchBtnLoader.classList.remove('hidden');
+      searchBtn.disabled = true;
+
+      try {
+        // Build Wikipedia API URL
+        const wikiQuery = searchTerm.includes('v.') ? searchTerm : `${searchTerm} court case`;
+        const url = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(wikiQuery)}&utf8=&format=json&origin=*`;
+        
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+          throw new Error(`Network response was not ok`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.error) {
+          throw new Error(data.error.info);
+        }
+
+        const cases = data.query.search || [];
+        const totalHits = data.query.searchinfo?.totalhits || 0;
+
+        // UI State: Success
+        loadingState.classList.add('hidden');
+        
+        if (cases.length === 0) {
+          renderNoResults();
+        } else {
+          resultsInfo.classList.remove('hidden');
+          totalHitsBadge.textContent = `${totalHits.toLocaleString()} results found`;
+          topResultsCount.textContent = `Top ${cases.length} results`;
+          renderCases(cases);
+        }
+
+      } catch (err) {
+        console.error("Fetch failed:", err);
+        // UI State: Error
+        loadingState.classList.add('hidden');
+        errorContainer.classList.remove('hidden');
+        errorText.textContent = "Failed to connect to the search API. Please try again.";
+      } finally {
+        searchBtnText.classList.remove('hidden');
+        searchBtnLoader.classList.add('hidden');
+        searchBtn.disabled = false;
+        
+        // Smooth scroll to results
+        document.getElementById('mainContent').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+
+    // Render HTML for Cases
+    function renderCases(cases) {
+      resultsContainer.innerHTML = cases.map(c => `
+        <div 
+          onclick="openArticle(${c.pageid}, '${c.title.replace(/'/g, "\\'")}')"
+          role="button"
+          tabindex="0"
+          onkeydown="if(event.key === 'Enter') openArticle(${c.pageid}, '${c.title.replace(/'/g, "\\'")}')"
+          class="block p-6 sm:p-8 bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 hover:shadow-lg hover:border-indigo-300 dark:hover:border-indigo-600 transition-all group cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-slate-900"
+        >
+          <div class="flex flex-col sm:flex-row items-start justify-between gap-6">
+            <div class="flex-1 min-w-0 w-full">
+              <h2 class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors mb-3 truncate whitespace-normal">
+                ${c.title}
+              </h2>
+              
+              <div class="flex flex-wrap items-center gap-y-2 gap-x-4 text-sm font-medium text-slate-600 dark:text-slate-400 mb-4">
+                <span class="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-900 py-1 px-2.5 rounded-lg">
+                  <i data-lucide="book-open" style="width: 16px; height: 16px; color: #94a3b8;"></i>
+                  Reference Article
+                </span>
+                <span class="hidden sm:inline text-slate-300 dark:text-slate-600">•</span>
+                <span class="text-slate-700 dark:text-slate-300">
+                  Updated: ${formatDate(c.timestamp)}
+                </span>
+              </div>
+
+              <div class="text-slate-600 dark:text-slate-300 leading-relaxed text-sm sm:text-base line-clamp-3 article-content">
+                ${c.snippet}...
+              </div>
+            </div>
+            
+            <!-- Desktop Button -->
+            <div class="shrink-0 hidden sm:flex pt-2">
+              <span class="inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-xl font-medium group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                Read Article <i data-lucide="file-text" style="width: 16px; height: 16px;"></i>
+              </span>
+            </div>
+
+            <!-- Mobile Button -->
+            <div class="sm:hidden w-full mt-2">
+              <span class="flex items-center justify-center gap-2 w-full px-4 py-3 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-xl font-medium group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                Read Article <i data-lucide="file-text" style="width: 16px; height: 16px;"></i>
+              </span>
+            </div>
+          </div>
+        </div>
+      `).join('');
+      
+      // Re-initialize icons for newly added HTML
+      lucide.createIcons();
+    }
+
+    // Render Empty State
+    function renderNoResults() {
+      resultsContainer.innerHTML = `
+        <div class="text-center py-24 px-4 bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
+          <div class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-slate-50 dark:bg-slate-900 text-slate-400 dark:text-slate-500 mb-5">
+            <i data-lucide="search" style="width: 40px; height: 40px;"></i>
+          </div>
+          <h3 class="text-2xl font-bold mb-2">No results found</h3>
+          <p class="text-slate-500 dark:text-slate-400 text-lg">
+            Try adjusting your search terms or checking for typos.
+          </p>
+        </div>
+      `;
+      lucide.createIcons();
+    }
+
+    // Modal Logic
+    window.openArticle = async function(pageId, title) {
+      // Show Modal immediately
+      articleModal.classList.remove('hidden');
+      // Prevent body scrolling
+      document.body.style.overflow = 'hidden';
+      
+      modalTitle.innerHTML = `<i data-lucide="scale" class="text-indigo-500 hidden sm:block" style="width: 24px; height: 24px;"></i> ${title}`;
+      lucide.createIcons();
+      
+      modalContent.innerHTML = '';
+      modalLoading.classList.remove('hidden');
+
+      try {
+        const url = `https://en.wikipedia.org/w/api.php?action=query&prop=extracts&pageids=${pageId}&format=json&origin=*`;
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        const extractHTML = data.query.pages[pageId]?.extract || "<p>No detailed information found.</p>";
+        modalContent.innerHTML = extractHTML;
+      } catch (err) {
+        console.error("Failed to load article:", err);
+        modalContent.innerHTML = "<p>Failed to load the article contents. Please try again later.</p>";
+      } finally {
+        modalLoading.classList.add('hidden');
+      }
+    };
+
+    window.closeModal = function() {
+      articleModal.classList.add('hidden');
+      document.body.style.overflow = ''; // Restore body scrolling
+      modalContent.innerHTML = ''; // Clear memory
+    };
+
+    // Close modal on escape key or clicking outside
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !articleModal.classList.contains('hidden')) {
+        closeModal();
+      }
+    });
+
+    articleModal.addEventListener('click', (e) => {
+      if (e.target === articleModal) {
+        closeModal();
+      }
+    });
+
+  </script>
+</body>
+</html>
 
 ```
